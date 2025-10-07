@@ -1,0 +1,363 @@
+openapi: 3.0.3
+info:
+  title: API Gateway - Placeholder Specification
+  version: "0.1.0"
+  description: >
+    This is a placeholder OpenAPI 3.0 specification for the future API Gateway.
+    It defines versioned endpoints under /v1 used by the Flutter app. The app reads base URLs from environment variables API_BASE_URL and AUTH_BASE_URL.
+    Common headers include Authorization (Bearer), X-Client-Version, and X-Platform. Errors follow a standard structure {code, message, details}.
+servers:
+  - url: "{API_BASE_URL}"
+    description: Primary API base URL
+    variables:
+      API_BASE_URL:
+        description: Base URL for API endpoints, sourced from ENV API_BASE_URL
+        default: https://api.example.com
+  - url: "{AUTH_BASE_URL}"
+    description: Auth service base URL (if separate from API)
+    variables:
+      AUTH_BASE_URL:
+        description: Base URL for authentication endpoints, sourced from ENV AUTH_BASE_URL
+        default: https://auth.example.com
+tags:
+  - name: auth
+    description: Authentication and session management
+  - name: users
+    description: User-related endpoints
+  - name: items
+    description: Item CRUD and listing
+paths:
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in with email and password
+      description: >
+        Exchanges user credentials for access and refresh tokens.
+        Requires X-Client-Version and X-Platform headers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful login
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: integer }
+              description: The request limit per window.
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+              description: The number of requests left in the window.
+            X-RateLimit-Reset:
+              schema: { type: integer, format: int64 }
+              description: UTC epoch seconds when the current window resets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security: []  # no bearer required for login
+      parameters:
+        - $ref: "#/components/parameters/XClientVersion"
+        - $ref: "#/components/parameters/XPlatform"
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh access token
+      description: Exchanges a valid refresh token for a new access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Successful token refresh
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: integer }
+              description: The request limit per window.
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+              description: The number of requests left in the window.
+            X-RateLimit-Reset:
+              schema: { type: integer, format: int64 }
+              description: UTC epoch seconds when the current window resets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security: []  # usually no bearer for refresh
+      parameters:
+        - $ref: "#/components/parameters/XClientVersion"
+        - $ref: "#/components/parameters/XPlatform"
+
+  /v1/users/me:
+    get:
+      tags: [users]
+      summary: Get current user profile
+      description: Returns details of the authenticated user.
+      responses:
+        "200":
+          description: Current user details
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: integer }
+              description: The request limit per window.
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+              description: The number of requests left in the window.
+            X-RateLimit-Reset:
+              schema: { type: integer, format: int64 }
+              description: UTC epoch seconds when the current window resets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XClientVersion"
+        - $ref: "#/components/parameters/XPlatform"
+
+  /v1/items:
+    get:
+      tags: [items]
+      summary: List items
+      description: Returns a list of items. May support pagination via query parameters in the future.
+      parameters:
+        - $ref: "#/components/parameters/XClientVersion"
+        - $ref: "#/components/parameters/XPlatform"
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+          description: Maximum number of items to return.
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: Pagination cursor (e.g., item id or opaque token).
+      responses:
+        "200":
+          description: A list of items
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: integer }
+              description: The request limit per window.
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+              description: The number of requests left in the window.
+            X-RateLimit-Reset:
+              schema: { type: integer, format: int64 }
+              description: UTC epoch seconds when the current window resets.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
+                  nextCursor:
+                    type: string
+                    nullable: true
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security:
+        - bearerAuth: []
+
+  /v1/items/{id}:
+    get:
+      tags: [items]
+      summary: Get item by id
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/XClientVersion"
+        - $ref: "#/components/parameters/XPlatform"
+      responses:
+        "200":
+          description: Item details
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: integer }
+              description: The request limit per window.
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+              description: The number of requests left in the window.
+            X-RateLimit-Reset:
+              schema: { type: integer, format: int64 }
+              description: UTC epoch seconds when the current window resets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PathId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+      description: Unique identifier.
+    XClientVersion:
+      in: header
+      name: X-Client-Version
+      required: false
+      schema:
+        type: string
+        example: "1.0.0"
+      description: Client application version.
+    XPlatform:
+      in: header
+      name: X-Platform
+      required: false
+      schema:
+        type: string
+        enum: [android, ios, web, macos, linux, windows, unknown]
+        example: "android"
+      description: Client platform identifier.
+
+  schemas:
+    Error:
+      type: object
+      description: Standard error structure.
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+          example: auth.invalid_credentials
+        message:
+          type: string
+          description: Human-readable error message.
+          example: Invalid email or password.
+        details:
+          description: Additional error details.
+          nullable: true
+      required: [code, message]
+    User:
+      type: object
+      description: Authenticated user model
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+      required: [id, email, name]
+    Item:
+      type: object
+      description: Basic item representation
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title]
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required: [email, password]
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: Bearer access token
+        refreshToken:
+          type: string
+          description: Refresh token
+        user:
+          $ref: "#/components/schemas/User"
+        expiresIn:
+          type: integer
+          format: int64
+          description: Access token TTL in seconds
+      required: [accessToken, refreshToken, user]
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required: [refreshToken]
+    RefreshResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+          format: int64
+          description: Access token TTL in seconds
+      required: [accessToken]
